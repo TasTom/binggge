@@ -1,11 +1,12 @@
 {
-  "name": "api-todo",
+  "name": "binggge",
   "version": "1.0.0",
-  "description": "API pour films",
-  "main": "src/index.js",
+  "private": true,
+  "description": "API binggge - le code de l'API vit dans api/",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "node --watch src/index.js",
-    "test": "node --test tests/server.test.js"
+    "install:api": "npm install --prefix api",
+    "start": "npm start --prefix api",
+    "dev": "npm run dev --prefix api",
+    "test": "npm test --prefix api"
   }
 }
