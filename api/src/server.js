@@ -82,21 +82,38 @@ app.post('/register', async (req, res, next) => {
   }
 })
 
-// le garde des routes privées
-const user = (req, res, next) =>
-  req.get('X-User')
-    ? next()
-    : res.status(401).json({ error: 'non authentifié' })
+// le garde des routes privées : le login doit exister en base.
+// Pose req.user, utilisé ensuite par les routes.
+const user = async (req, res, next) => {
+  const login = String(req.get('X-User') || '').trim()
+
+  if (!login) {
+    return res.status(401).json({ error: 'non authentifié' })
+  }
+
+  try {
+    const { rows } = await db.query(
+      'SELECT id, login FROM users WHERE login = $1', [login])
+
+    if (!rows[0]) {
+      return res.status(401).json({ error: 'non authentifié' })
+    }
+
+    req.user = rows[0]
+    next()
+  } catch (err) {
+    next(err)
+  }
+}
 
 app.get('/watchlist', user, async (req, res, next) => {
   try {
     const { rows } = await db.query(
-      `SELECT w.id, w.show_id AS "showId", w.title, w.seen
-         FROM watchlist w
-         JOIN users u ON u.id = w.user_id
-        WHERE u.login = $1
-        ORDER BY w.id`,
-      [req.get('X-User')])
+      `SELECT id, show_id AS "showId", title, seen
+         FROM watchlist
+        WHERE user_id = $1
+        ORDER BY id`,
+      [req.user.id])
     res.json(rows)
   } catch (err) {
     next(err)
@@ -116,17 +133,11 @@ app.post('/watchlist', user, async (req, res, next) => {
   }
 
   try {
-    // L'INSERT ... SELECT attache l'entrée au login de l'en-tête.
-    // Aucune ligne insérée = login inconnu -> 401.
     const { rows } = await db.query(
       `INSERT INTO watchlist(user_id, show_id, title)
-       SELECT id, $2, $3 FROM users WHERE login = $1
+       VALUES($1, $2, $3)
        RETURNING id, show_id AS "showId", title, seen`,
-      [req.get('X-User'), showId, title.trim()])
-
-    if (!rows[0]) {
-      return res.status(401).json({ error: 'non authentifié' })
-    }
+      [req.user.id, showId, title.trim()])
 
     res.status(201).json(rows[0])
   } catch (err) {
