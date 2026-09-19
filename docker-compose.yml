@@ -1,10 +1,24 @@
 services:
+  api:
+    build: ./api
+    environment:
+      # "db" est le nom du service, résolu par le réseau interne de compose.
+      # Depuis un conteneur, "localhost" désigne le conteneur lui-même :
+      # c'est l'erreur la plus fréquente.
+      DATABASE_URL: postgres://postgres:${DB_PASS}@db:5432/binggge
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
   db:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: binggge
-      POSTGRES_PASSWORD: binggge
-    ports: ["5432:5432"]
+      # Lu depuis .env (jamais versionné). Utilisé au TOUT PREMIER démarrage
+      # seulement : sur un volume existant, changer cette valeur ne change pas
+      # le mot de passe réel de la base.
+      POSTGRES_PASSWORD: ${DB_PASS}
     volumes:
       - pgdata:/var/lib/postgresql/data
       # Chargé automatiquement au tout premier démarrage, quand pgdata est vide.
@@ -14,17 +28,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-
-  api:
-    build: .
-    environment:
-      # "db" est le nom du service, résolu par le réseau interne de compose.
-      # C'est ce qui remplace le "localhost" du lancement à la main.
-      DATABASE_URL: postgres://postgres:binggge@db:5432/binggge
-    ports: ["3000:3000"]
-    depends_on:
-      db:
-        condition: service_healthy
 
 volumes:
   pgdata:
