@@ -6,27 +6,31 @@ allégée : identifiant, titre, année, image.
 
 Tout le code de l'API vit dans `api/`.
 
-## Démarrage en deux commandes
+## Démarrage
 
-Tout en Docker (API + base, le plus simple) :
+Le mot de passe de la base vient d'un fichier `.env`, jamais versionné. À créer
+une fois à la racine :
+
+```
+DB_PASS=quelque-chose-de-long
+```
+
+Puis :
 
 ```bash
 docker compose up -d --build
 ```
 
-L'API répond sur http://localhost:3000. Le schéma est chargé automatiquement
-au premier démarrage.
-
-Ou à la main, pour développer avec rechargement :
+**Aucun port n'est publié** : c'est voulu, en production Traefik joint le
+conteneur directement sur le réseau Docker. Pour vérifier en local, passez par le
+conteneur :
 
 ```bash
-npm run install:api   # installe les dépendances de api/
-docker compose up -d db
-npm start             # démarre l'API sur http://localhost:3000
+docker compose exec api wget -qO- localhost:3000/health
+# {"status":"ok"}
 ```
 
-Sans base, `/health` et `/shows` répondent quand même ; les routes watchlist
-renvoient une erreur 500.
+Le schéma est chargé automatiquement au premier démarrage (volume vide).
 
 Prérequis : Node 20+, npm, Docker. Aucune clé API.
 
@@ -36,8 +40,8 @@ Prérequis : Node 20+, npm, Docker. Aucune clé API.
 docker compose up -d db
 ```
 
-Postgres 16, base `binggge`, mot de passe `binggge`, exposé sur `localhost:5432`.
-Le volume `pgdata` conserve les données entre les redémarrages.
+Postgres 16, base `binggge`, mot de passe lu dans `.env` (`DB_PASS`). Aucun port
+publié. Le volume `pgdata` conserve les données entre les redémarrages.
 
 Au **tout premier** démarrage (volume vide), `api/db/schema.sql` est joué
 automatiquement via `/docker-entrypoint-initdb.d`. Si le volume existe déjà,
@@ -57,10 +61,19 @@ docker compose exec -T db psql -U postgres binggge < api/db/schema.sql
 donc les données**. Tables : `users(id, login)`, `watchlist(id, user_id,
 show_id, title, seen)`.
 
-L'API lit `DATABASE_URL`. En conteneur, compose la fixe à
-`postgres://postgres:binggge@db:5432/binggge` — `db` est le nom du service, pas
-`localhost`. Hors conteneur, la valeur par défaut est
-`postgres://postgres:binggge@localhost:5432/binggge`.
+L'API lit `DATABASE_URL`. Compose la construit à partir de `.env` :
+`postgres://postgres:${DB_PASS}@db:5432/binggge` — `db` est le nom du service,
+pas `localhost`. C'est l'erreur la plus fréquente.
+
+Le mot de passe n'est appliqué qu'à la **création** du volume. Sur une base
+existante, il faut l'aligner à la main :
+
+```bash
+docker compose exec -T db psql -U postgres -d binggge \
+  -c "ALTER USER postgres WITH PASSWORD 'la-valeur-de-DB_PASS';"
+```
+
+Sinon `docker compose down -v` (supprime le volume, donc les données).
 
 Pour repartir d'une base vide : `docker compose down -v` (supprime le volume,
 donc les données, et rejoue le schéma au démarrage suivant).
@@ -79,6 +92,10 @@ Une route privée exige l'en-tête `X-User: <login>`. Sans en-tête — ou avec 
 login inconnu — elle répond `401`. Attention : c'est une identification, pas une
 authentification. Voir la section [Authentification](#authentification-inexistante)
 plus bas.
+
+Les exemples ci-dessous supposent l'API joignable sur `localhost:3000`. Sans port
+publié, remplacez `curl http://localhost:3000/x` par
+`docker compose exec api wget -qO- localhost:3000/x`.
 
 ### GET /health
 
@@ -179,52 +196,94 @@ sont ouvertes à qui connaît le nom d'un utilisateur, et ces noms sont devinabl
 
 ## Tests
 
-```bash
-npm test                    # depuis la racine
-cd api && npm test          # équivalent
-```
-
 Cinq tests (`node:test` + `supertest`) : `/health` répond 200, une inscription
 crée bien l'utilisateur, ajouter une série la fait apparaître dans `/watchlist`,
 `/watchlist` sans en-tête renvoie 401, un titre vide est refusé (400).
 
-Ils interrogent la vraie base : lancez `docker compose up -d db` et chargez le
-schéma avant. Ils créent des logins uniques (`test-...`) et suppriment leurs
-lignes à la fin.
-
-## Déploiement
-
-L'image ne contient que l'API (pas de base) :
+**Ils tournent dans le pipeline** (job `test`), avec un Postgres de service :
+c'est la référence. En local, il faut une base joignable sur `localhost:5432` —
+par exemple une base jetable :
 
 ```bash
-docker build -t api-binggge .
+docker run -d --name pg-test -p 5432:5432 \
+  -e POSTGRES_PASSWORD=test -e POSTGRES_DB=binggge postgres:16-alpine
+docker exec -i pg-test psql -U postgres -d binggge < api/db/schema.sql
+```
+
+Puis avec `DATABASE_URL=postgres://postgres:test@localhost:5432/binggge` dans
+l'environnement : `npm test --prefix api`.
+
+Les tests créent des logins uniques (`test-...`) et suppriment leurs lignes à la
+fin.
+
+## Image Docker
+
+`api/Dockerfile` emballe l'API (pas de base) :
+
+```bash
+docker build -t binggge-api ./api
 docker run -p 3000:3000 \
-  -e DATABASE_URL=postgres://postgres:binggge@un-hote:5432/binggge \
-  api-binggge
+  -e DATABASE_URL=postgres://postgres:motdepasse@un-hote:5432/binggge \
+  binggge-api
 ```
 
 Sans `DATABASE_URL`, l'API cherche la base sur `localhost:5432` — depuis un
-conteneur, c'est le conteneur lui-même. En local, `docker compose up -d --build`
-s'en charge pour vous.
+conteneur, c'est le conteneur lui-même.
+
+## Mise en ligne
+
+Le pipeline (`.github/workflows/ci.yml`) part à chaque push et à chaque pull
+request :
+
+| Job | Ce qu'il fait | Quand |
+|---|---|---|
+| `test` | `npm ci`, charge `api/db/schema.sql`, `npm test` | toujours |
+| `build` | `docker build -t binggge-api:$SHA ./api` | toujours |
+| `deploy` | SSH sur le serveur, `git pull`, `docker compose up -d --build` | `main` seulement |
+
+Cible : **https://iut.cafeclaudie.fr/TasTom/health** (dossier serveur
+`/srv/binggge/TasTom`). Si votre login serveur diffère, ajustez l'URL.
+
+Deux réglages à faire une fois dans les *Settings* du dépôt GitHub :
+
+1. Secret `SSH_DEPLOY_KEY` (clé privée) et variable `LOGIN` (login serveur).
+2. Protection de `main` avec « Require status checks to pass » : une PR au
+   pipeline rouge devient impossible à merger.
+
+Sur le serveur, `.env` n'est pas versionné : créez-le une fois dans
+`/srv/binggge/TasTom` avec la même valeur `DB_PASS`, sinon le `docker compose up`
+du déploiement échoue.
+
+## Définition de fini
+
+Écrite ici, elle vaut pour tous les tickets restants :
+
+1. Le pipeline est vert.
+2. L'URL répond depuis une autre machine.
+3. Le README dit comment la joindre.
+4. Le ticket est fermé par une MR.
+5. Aucun secret dans le dépôt (ni clé, ni mot de passe, ni `.env`).
 
 ## Ce qui n'existe pas encore
 
 - Authentification : voir [Authentification inexistante](#authentification-inexistante).
 - `DELETE /watchlist/:id` et la case `seen` (cochée/décochée).
 - Migrations : `schema.sql` recrée tout au lieu de faire évoluer le schéma.
-- Pipeline CI.
+- Séance 4 : le front, et la mise en ligne de bout en bout.
 
 ## Structure
 
 ```
+.github/workflows/ci.yml  # pipeline : test, build, deploy
 api/
-  src/server.js         # l'API (Express), exporte { app, user, db }
-  tests/server.test.js  # les 5 tests
-  db/schema.sql         # tables users + watchlist, rejouable
-  package.json          # dépendances de l'API
-docker-compose.yml      # services db (Postgres) + api
-Dockerfile              # image de l'API (contexte = racine du dépôt)
-package.json            # scripts de la racine, qui délèguent à api/
+  Dockerfile              # image de l'API (contexte = api/)
+  src/server.js           # l'API (Express), exporte { app, user, db }
+  tests/server.test.js    # les 5 tests
+  db/schema.sql           # tables users + watchlist, rejouable
+  package.json            # dépendances de l'API
+docker-compose.yml        # services api + db
+.env                      # DB_PASS, jamais versionné
+package.json              # scripts de la racine, qui délèguent à api/
 ```
 
 ## Journal des séances
@@ -232,4 +291,5 @@ package.json            # scripts de la racine, qui délèguent à api/
 - Séance 1 : `/health`, `/shows`, `/watchlist` en mémoire.
 - Séance 2 : Postgres, `users`, `/register`, watchlist privée par `X-User`,
   cinq tests dont un refus de titre vide.
-- Séance 3 : Docker, le pipeline, et mise en ligne
+- Séance 3 : image Docker de l'API (`api/Dockerfile`), compose avec `.env`,
+  pipeline GitHub Actions (test, build, deploy), mise en ligne.
