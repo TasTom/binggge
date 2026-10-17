@@ -5,6 +5,33 @@ on:
   pull_request:
 
 jobs:
+  front:
+    name: Front React
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: front
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: front/package-lock.json
+
+      - name: Installer les dépendances du front
+        run: npm ci
+
+      - name: Tester les interactions
+        run: npm test
+
+      - name: Construire le front
+        run: npm run build
+
+      - name: Construire l'image Docker du front
+        run: docker build -t "binggge-front:${GITHUB_SHA::7}" .
+
   test:
     name: Tests
     runs-on: ubuntu-latest
@@ -53,7 +80,7 @@ jobs:
 
   build:
     name: Image Docker
-    needs: test
+    needs: [test, front]
     runs-on: ubuntu-latest
 
     steps:
