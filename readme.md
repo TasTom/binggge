@@ -239,20 +239,42 @@ request :
 |---|---|---|
 | `test` | `npm ci`, charge `api/db/schema.sql`, `npm test` | toujours |
 | `build` | `docker build -t binggge-api:$SHA ./api` | toujours |
-| `deploy` | SSH sur le serveur, `git pull`, `docker compose up -d --build` | `main` seulement |
+| `deploy` | SSH sur le serveur, `git pull`, `sudo binggge up -d --build` | `main` seulement |
 
 Cible : **https://iut.cafeclaudie.fr/TasTom/health** (dossier serveur
 `/srv/binggge/TasTom`). Si votre login serveur diffère, ajustez l'URL.
 
-Deux réglages à faire une fois dans les *Settings* du dépôt GitHub :
+### Réglages à faire une fois
 
-1. Secret `SSH_DEPLOY_KEY` (clé privée) et variable `LOGIN` (login serveur).
-2. Protection de `main` avec « Require status checks to pass » : une PR au
-   pipeline rouge devient impossible à merger.
+1. Secret `SSH_DEPLOY_KEY` (clé privée de déploiement) et variable `LOGIN`
+   (login serveur), dans *Settings → Secrets and variables → Actions*.
+2. Protection de `main` : *Settings → Branches* → « Require status checks to
+   pass » avec le check `Tests`, **et « Do not allow bypassing the above
+   settings »** (équivalent `enforce_admins`). Sans cette dernière option,
+   l'administrateur peut merger malgré un pipeline rouge.
 
-Sur le serveur, `.env` n'est pas versionné : créez-le une fois dans
-`/srv/binggge/TasTom` avec la même valeur `DB_PASS`, sinon le `docker compose up`
-du déploiement échoue.
+Le serveur n'autorise pas Docker directement : il faut passer par `sudo binggge`,
+qui refuse en outre les montages de dossiers de l'hôte. Le schéma n'est donc
+**pas** chargé automatiquement, il faut le faire une fois à la main :
+
+```bash
+ssh <login>@iut.cafeclaudie.fr
+cd ~ && sudo binggge exec -T db psql -U postgres binggge < api/db/schema.sql
+```
+
+`.env` n'est pas versionné : créez-le une fois dans `/srv/binggge/<login>` avec
+la même valeur `DB_PASS`, sinon le `docker compose up` du déploiement échoue.
+
+### Preuve que le pipeline bloque
+
+Capture : [`docs/PIPELINE_ROUGE_BLOQUE.png`](docs/PIPELINE_ROUGE_BLOQUE.png).
+Une branche casse volontairement un test ; la PR associée affiche le check
+`Tests` en échec et le bouton « Merge pull request » désactivé. Même un appel
+direct à l'API de merge est refusé :
+
+```
+HTTP 405 {"message":"Required status check \"Tests\" is failing."}
+```
 
 ## Définition de fini
 
