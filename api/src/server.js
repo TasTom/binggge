@@ -1,6 +1,9 @@
 // Séance 2 : inscription + garde des routes privées (API Express + Postgres).
+// Séance 4 : sert aussi le front (dossier public/), car Traefik ne route que
+// vers ce conteneur.
 // Base : docker compose up -d db, puis rejouer api/db/schema.sql.
 
+const path = require('path')
 const express = require('express')
 const { Pool } = require('pg')
 
@@ -17,6 +20,16 @@ app.use((req, res, next) => {
     return res.sendStatus(204)
   }
 
+  next()
+})
+
+// Traefik expose l'application sous /TasTom et retire ce préfixe avant de
+// transmettre. En local il n'y a pas de Traefik : ce middleware fait la même
+// chose, pour que le conteneur se comporte identiquement dans les deux cas.
+app.use((req, res, next) => {
+  if (req.url === '/TasTom' || req.url.startsWith('/TasTom/')) {
+    req.url = req.url.slice('/TasTom'.length) || '/'
+  }
   next()
 })
 
@@ -144,6 +157,10 @@ app.post('/watchlist', user, async (req, res, next) => {
     next(err)
   }
 })
+
+// Front construit (image Docker uniquement) : index.html et /assets/...
+// Le dossier est absent en développement, express.static l'ignore alors.
+app.use(express.static(path.join(__dirname, '..', 'public')))
 
 // 404 - Route inconnue
 app.use((req, res) => {
