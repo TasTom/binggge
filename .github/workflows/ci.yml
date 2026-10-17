@@ -50,3 +50,16 @@ jobs:
       - name: Lancer les tests
         working-directory: api
         run: npm test
+
+  build:
+    name: Image Docker
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pas de dind sur GitHub : le runner a déjà Docker.
+      # ${GITHUB_SHA::7} = équivalent de $CI_COMMIT_SHORT_SHA.
+      - name: Construire l'image
+        run: docker build -t "binggge-api:${GITHUB_SHA::7}" ./api
