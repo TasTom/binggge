@@ -16,7 +16,10 @@ services:
     restart: unless-stopped
 
   api:
-    build: ./api
+    # Contexte = racine du dépôt : l'image de l'API embarque aussi le front.
+    build:
+      context: .
+      dockerfile: api/Dockerfile
     environment:
       # "db" est le nom du service, résolu par le réseau interne de compose.
       # Depuis un conteneur, "localhost" désigne le conteneur lui-même :

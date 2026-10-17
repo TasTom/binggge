@@ -88,8 +88,9 @@ jobs:
 
       # Pas de dind sur GitHub : le runner a déjà Docker.
       # ${GITHUB_SHA::7} = équivalent de $CI_COMMIT_SHORT_SHA.
+      # Contexte = racine : l'image de l'API embarque le front construit.
       - name: Construire l'image
-        run: docker build -t "binggge-api:${GITHUB_SHA::7}" ./api
+        run: docker build -f api/Dockerfile -t "binggge-api:${GITHUB_SHA::7}" .
 
   deploy:
     name: Mise en ligne
