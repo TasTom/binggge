@@ -93,4 +93,14 @@ describe('API binggge', () => {
 
     assert.equal(r.status, 400)
   })
+
+  // 06 - Traefik expose l'application sous /TasTom, en retirant le préfixe.
+  // Le conteneur doit répondre pareil avec et sans (utile pour tester en local).
+  test('le préfixe /TasTom est accepté', async () => {
+    const direct = await request(app).get('/health')
+    const prefixe = await request(app).get('/TasTom/health')
+
+    assert.equal(prefixe.status, 200)
+    assert.deepEqual(prefixe.body, direct.body)
+  })
 })

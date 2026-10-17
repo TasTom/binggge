@@ -1,0 +1,11 @@
+# Ce qui n'a pas besoin d'entrer dans le contexte de construction.
+node_modules
+**/node_modules
+# Le front est reconstruit dans l'image : inutile d'envoyer un build local.
+**/dist
+.git
+.gitignore
+.dockerignore
+README.md
+docs
+binggge - TP3.pdf
