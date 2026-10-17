@@ -2,11 +2,16 @@
   "name": "binggge",
   "version": "1.0.0",
   "private": true,
-  "description": "API binggge - le code de l'API vit dans api/",
+  "description": "binggge — recherche de séries et watchlist, API Express et front React",
   "scripts": {
     "install:api": "npm install --prefix api",
+    "install:front": "npm install --prefix front",
     "start": "npm start --prefix api",
     "dev": "npm run dev --prefix api",
-    "test": "npm test --prefix api"
+    "test": "npm test --prefix api",
+    "dev:front": "npm run dev --prefix front",
+    "build": "npm run build --prefix front",
+    "preview": "npm run preview --prefix front",
+    "test:front": "npm test --prefix front"
   }
 }

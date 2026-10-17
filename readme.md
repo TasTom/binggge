@@ -6,6 +6,79 @@ allégée : identifiant, titre, année, image.
 
 Tout le code de l'API vit dans `api/`.
 
+## Front React
+
+L’interface vit dans `front/` : React + Vite, CSS simple et icônes Lucide.
+Elle ouvre la recherche de séries et propose une sélection de six séries réelles,
+avec leurs affiches TVMaze servies localement. La watchlist utilise les routes
+existantes de l’API, et le pseudo choisi est conservé dans le navigateur.
+
+### Tout lancer avec Docker Compose
+
+Avec le fichier `.env` de la base décrit ci-dessous :
+
+```bash
+docker compose up -d --build
+```
+
+Ouvrir **http://127.0.0.1:8080**. Cette commande construit et démarre le front,
+l’API et PostgreSQL. Aucun lancement de Vite ni installation Node sur la machine
+n’est nécessaire. Le front est compilé dans une première étape Node, puis servi
+par Nginx ; Nginx transmet `/api/*` à `api:3000` en retirant le préfixe `/api`.
+Les en-têtes de profil et les corps JSON sont transmis à l’API.
+
+Le front attend que l’API soit saine, et l’API attend PostgreSQL. Le port 8080
+est lié à `127.0.0.1` ; les ports de l’API et de la base restent internes.
+
+```bash
+docker compose ps                     # état des trois services
+docker compose logs -f front api      # journaux du front et de l’API
+docker compose down                   # arrêt, sans supprimer la base
+```
+
+### Développer le front avec Vite
+
+Avec le fichier `.env` de la base décrit ci-dessous :
+
+```bash
+# API et base uniquement ; le port API est publié sur 127.0.0.1.
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build api
+
+# Installer puis lancer le front.
+npm run install:front
+npm run dev:front
+```
+
+Ouvrir **http://127.0.0.1:5173**. Vite transmet `/api/*` à l’API sur le port 3000.
+Si l’API tourne déjà en local avec `npm run dev`, il suffit de lancer le front.
+La sélection d’accueil reste visible sans API ; la recherche et les profils
+nécessitent une API joignable, et la watchlist nécessite PostgreSQL.
+
+### Configuration et build
+
+Le fichier `front/.env.example` décrit `VITE_API_URL`, `API_PROXY_TARGET` et
+`VITE_BASE_PATH`. Copier les valeurs à personnaliser dans `front/.env.local`.
+Le proxy s’applique aux serveurs de développement et de preview uniquement.
+Sur un hébergement statique, définir `VITE_API_URL` avant le build vers une API
+joignable, ou configurer un reverse proxy pour `/api`.
+
+```bash
+npm run build        # génère front/dist/
+npm run preview      # aperçu du build sur http://127.0.0.1:4173
+npm run test:front   # tests des interactions React, sans base de données
+```
+
+Fonctions : recherche avec annulation des anciennes requêtes, choix ou création
+d’un profil, ajout à la watchlist avec prévention des doublons depuis l’interface,
+filtrage de la liste, affiches de remplacement et états de chargement/erreur/vide.
+Le statut `seen` existant est affiché, sans action de modification puisque l’API
+ne fournit pas encore cette route. La structure de la liste reste conservée par
+l’API ; le navigateur ne mémorise que le pseudo et un petit cache de métadonnées.
+
+Comme l’API, le front utilise une identification par pseudo, sans authentification.
+Les conseils d’Impeccable et de UI UX Pro Max ont été consultés ; les décisions
+visuelles retenues sont documentées dans `DESIGN.md`.
+
 ## Démarrage
 
 Le mot de passe de la base vient d'un fichier `.env`, jamais versionné. À créer
@@ -21,9 +94,16 @@ Puis :
 docker compose up -d --build
 ```
 
-**Aucun port n'est publié** : c'est voulu, en production Traefik joint le
-conteneur directement sur le réseau Docker. Pour vérifier en local, passez par le
-conteneur :
+Le front est accessible sur **http://127.0.0.1:8080**. Seul ce port local est
+publié ; l’API et PostgreSQL sont joints sur le réseau Docker. Pour vérifier
+l’API en passant par le proxy du front :
+
+```bash
+curl http://127.0.0.1:8080/api/health
+# {"status":"ok"}
+```
+
+Ou directement dans le conteneur :
 
 ```bash
 docker compose exec api wget -qO- localhost:3000/health
@@ -32,7 +112,8 @@ docker compose exec api wget -qO- localhost:3000/health
 
 Le schéma est chargé automatiquement au premier démarrage (volume vide).
 
-Prérequis : Node 20+, npm, Docker. Aucune clé API.
+Prérequis pour l’ensemble : Docker avec Compose. Node 20+ et npm sont utiles
+uniquement pour le développement hors Docker. Aucune clé API.
 
 ## Base de données
 
@@ -93,8 +174,9 @@ login inconnu — elle répond `401`. Attention : c'est une identification, pas 
 authentification. Voir la section [Authentification](#authentification-inexistante)
 plus bas.
 
-Les exemples ci-dessous supposent l'API joignable sur `localhost:3000`. Sans port
-publié, remplacez `curl http://localhost:3000/x` par
+Les exemples ci-dessous supposent l'API joignable sur `localhost:3000` via le
+complément de développement. Avec la stack Compose complète, remplacez cette
+origine par `http://127.0.0.1:8080/api`, ou utilisez
 `docker compose exec api wget -qO- localhost:3000/x`.
 
 ### GET /health
@@ -218,6 +300,16 @@ fin.
 
 ## Image Docker
 
+`front/Dockerfile` construit React avec Node puis sert le résultat avec Nginx :
+
+```bash
+docker compose build front
+```
+
+La configuration `front/nginx.conf` sert les fichiers statiques et le proxy API.
+Le fichier `front/.dockerignore` exclut les dépendances locales, le build local
+et les fichiers d’environnement privés du contexte de construction.
+
 `api/Dockerfile` emballe l'API (pas de base) :
 
 ```bash
@@ -237,44 +329,27 @@ request :
 
 | Job | Ce qu'il fait | Quand |
 |---|---|---|
+| `front` | tests React, build Vite et image Docker du front | toujours |
 | `test` | `npm ci`, charge `api/db/schema.sql`, `npm test` | toujours |
 | `build` | `docker build -t binggge-api:$SHA ./api` | toujours |
-| `deploy` | SSH sur le serveur, `git pull`, `sudo binggge up -d --build` | `main` seulement |
+| `deploy` | SSH sur le serveur, `git pull`, `docker compose up -d --build` | `main` seulement |
 
-Cible : **https://iut.cafeclaudie.fr/TasTom/health** (dossier serveur
+L’image API attend les tests API et le job front ; le déploiement attend ensuite
+ces validations. Le routage Traefik du serveur vers le front reste à configurer
+avant d’annoncer une URL publique du front.
+
+Cible API existante : **https://iut.cafeclaudie.fr/TasTom/health** (dossier serveur
 `/srv/binggge/TasTom`). Si votre login serveur diffère, ajustez l'URL.
 
-### Réglages à faire une fois
+Deux réglages à faire une fois dans les *Settings* du dépôt GitHub :
 
-1. Secret `SSH_DEPLOY_KEY` (clé privée de déploiement) et variable `LOGIN`
-   (login serveur), dans *Settings → Secrets and variables → Actions*.
-2. Protection de `main` : *Settings → Branches* → « Require status checks to
-   pass » avec le check `Tests`, **et « Do not allow bypassing the above
-   settings »** (équivalent `enforce_admins`). Sans cette dernière option,
-   l'administrateur peut merger malgré un pipeline rouge.
+1. Secret `SSH_DEPLOY_KEY` (clé privée) et variable `LOGIN` (login serveur).
+2. Protection de `main` avec « Require status checks to pass » : une PR au
+   pipeline rouge devient impossible à merger.
 
-Le serveur n'autorise pas Docker directement : il faut passer par `sudo binggge`,
-qui refuse en outre les montages de dossiers de l'hôte. Le schéma n'est donc
-**pas** chargé automatiquement, il faut le faire une fois à la main :
-
-```bash
-ssh <login>@iut.cafeclaudie.fr
-cd ~ && sudo binggge exec -T db psql -U postgres binggge < api/db/schema.sql
-```
-
-`.env` n'est pas versionné : créez-le une fois dans `/srv/binggge/<login>` avec
-la même valeur `DB_PASS`, sinon le `docker compose up` du déploiement échoue.
-
-### Preuve que le pipeline bloque
-
-Capture : [`docs/PIPELINE_ROUGE_BLOQUE.png`](docs/PIPELINE_ROUGE_BLOQUE.png).
-Une branche casse volontairement un test ; la PR associée affiche le check
-`Tests` en échec et le bouton « Merge pull request » désactivé. Même un appel
-direct à l'API de merge est refusé :
-
-```
-HTTP 405 {"message":"Required status check \"Tests\" is failing."}
-```
+Sur le serveur, `.env` n'est pas versionné : créez-le une fois dans
+`/srv/binggge/TasTom` avec la même valeur `DB_PASS`, sinon le `docker compose up`
+du déploiement échoue.
 
 ## Définition de fini
 
@@ -291,7 +366,7 @@ HTTP 405 {"message":"Required status check \"Tests\" is failing."}
 - Authentification : voir [Authentification inexistante](#authentification-inexistante).
 - `DELETE /watchlist/:id` et la case `seen` (cochée/décochée).
 - Migrations : `schema.sql` recrée tout au lieu de faire évoluer le schéma.
-- Séance 4 : le front, et la mise en ligne de bout en bout.
+- Routage public du front sur le serveur (la stack Docker locale est disponible).
 
 ## Structure
 
@@ -303,7 +378,16 @@ api/
   tests/server.test.js    # les 5 tests
   db/schema.sql           # tables users + watchlist, rejouable
   package.json            # dépendances de l'API
-docker-compose.yml        # services api + db
+front/
+  Dockerfile              # build Node puis service Nginx
+  .dockerignore           # exclut node_modules, dist et les .env privés
+  nginx.conf              # statique + proxy /api vers Express
+  src/                    # interface React, client API et tests
+  public/posters/         # affiches de la sélection d’accueil
+  .env.example            # configuration du front et du proxy local
+  package.json            # dépendances et commandes Vite
+docker-compose.yml        # services front + api + db ; front sur 127.0.0.1:8080
+docker-compose.local.yml  # accès local à l’API pour le front (optionnel)
 .env                      # DB_PASS, jamais versionné
 package.json              # scripts de la racine, qui délèguent à api/
 ```
