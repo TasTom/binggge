@@ -1,0 +1,7 @@
+# Complément de développement : l’API reste accessible uniquement sur cette machine.
+# Pour développer le front avec Vite :
+# docker compose -f docker-compose.yml -f docker-compose.local.yml up -d --build api
+services:
+  api:
+    ports:
+      - "127.0.0.1:3000:3000"
