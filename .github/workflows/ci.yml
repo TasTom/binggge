@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+
+    # GitHub démarre Postgres à côté du job (équivalent des services GitLab).
+    # POSTGRES_DB est indispensable : sans lui, la base s'appelle "postgres"
+    # et l'API ne trouve pas la base "binggge".
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: binggge
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d binggge"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      # Le job tourne sur la VM du runner : le service est joint par localhost
+      # (pas par son nom, contrairement à GitLab).
+      DATABASE_URL: postgres://postgres:test@localhost:5432/binggge
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+
+      - name: Installer les dépendances
+        working-directory: api
+        run: npm ci
+
+      - name: Créer les tables
+        run: psql "$DATABASE_URL" -f api/db/schema.sql
+
+      - name: Lancer les tests
+        working-directory: api
+        run: npm test
+
+  build:
+    name: Image Docker
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pas de dind sur GitHub : le runner a déjà Docker.
+      # ${GITHUB_SHA::7} = équivalent de $CI_COMMIT_SHORT_SHA.
+      - name: Construire l'image
+        run: docker build -t "binggge-api:${GITHUB_SHA::7}" ./api
+
+  deploy:
+    name: Mise en ligne
+    needs: build
+    # Équivalent de rules: if $CI_COMMIT_BRANCH == "main"
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Déployer sur le serveur
+        env:
+          SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
+          LOGIN: ${{ vars.LOGIN }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_DEPLOY_KEY" > ~/.ssh/id_binggge
+          chmod 600 ~/.ssh/id_binggge
+          ssh-keyscan iut.cafeclaudie.fr >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/id_binggge "$LOGIN@iut.cafeclaudie.fr" \
+            "cd /srv/binggge/$LOGIN && git pull && docker compose up -d --build"
