@@ -3,8 +3,9 @@ node_modules/
 .DS_Store
 binggge - TP3.pdf
 .design-skills/
-.impeccable/cache/
-.impeccable/mocks/
-.impeccable/questions/
+# État local de l'outil de design : rien à versionner.
+.impeccable/
+# Orphelin depuis que le contexte de construction est la racine.
+api/.dockerignore
 front/dist/
 front/.env.local
