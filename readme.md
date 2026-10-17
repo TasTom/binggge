@@ -310,15 +310,18 @@ La configuration `front/nginx.conf` sert les fichiers statiques et le proxy API.
 Le fichier `front/.dockerignore` exclut les dépendances locales, le build local
 et les fichiers d’environnement privés du contexte de construction.
 
-`api/Dockerfile` emballe l'API (pas de base) :
+`api/Dockerfile` construit le front **puis** emballe l'API (pas de base). Le
+contexte de construction est la racine du dépôt, car l'étape front a besoin de
+`front/` :
 
 ```bash
-docker build -t binggge-api ./api
+docker build -f api/Dockerfile -t binggge-api .
 docker run -p 3000:3000 \
   -e DATABASE_URL=postgres://postgres:motdepasse@un-hote:5432/binggge \
   binggge-api
 ```
 
+Les fichiers du front sont copiés dans `public/` et servis par `express.static`.
 Sans `DATABASE_URL`, l'API cherche la base sur `localhost:5432` — depuis un
 conteneur, c'est le conteneur lui-même.
 
@@ -331,15 +334,44 @@ request :
 |---|---|---|
 | `front` | tests React, build Vite et image Docker du front | toujours |
 | `test` | `npm ci`, charge `api/db/schema.sql`, `npm test` | toujours |
-| `build` | `docker build -t binggge-api:$SHA ./api` | toujours |
-| `deploy` | SSH sur le serveur, `git pull`, `docker compose up -d --build` | `main` seulement |
+| `build` | `docker build -f api/Dockerfile -t binggge-api:$SHA .` | toujours |
+| `deploy` | SSH sur le serveur, `git pull`, `sudo binggge up -d --build` | `main` seulement |
 
 L’image API attend les tests API et le job front ; le déploiement attend ensuite
-ces validations. Le routage Traefik du serveur vers le front reste à configurer
-avant d’annoncer une URL publique du front.
+ces validations.
 
-Cible API existante : **https://iut.cafeclaudie.fr/TasTom/health** (dossier serveur
-`/srv/binggge/TasTom`). Si votre login serveur diffère, ajustez l'URL.
+### Pourquoi le front est servi par l'API
+
+Traefik ne route que vers le conteneur de l'API. Sa configuration sur le serveur
+(`/srv/traefik/dynamic.yml`) est figée :
+
+```yaml
+TasTom:
+  rule: "PathPrefix(`/TasTom`)"
+  middlewares: ["TasTom-strip"]     # stripPrefix: /TasTom
+  service: TasTom
+
+TasTom:
+  loadBalancer:
+    servers:
+      - url: "http://tastom-api-1:3000"
+```
+
+Et `traefik.yml` définit `providers.docker.exposedByDefault: false` : le
+conteneur `front` ne peut donc pas être exposé. C'est pourquoi le front est
+construit dans l'image de l'API et servi par elle.
+
+Traefik retire le préfixe `/TasTom` avant de transmettre. Le conteneur accepte
+**les deux formes** (`/health` et `/TasTom/health`) pour être testable en local
+sans Traefik. Le service `front` reste utile pour développer avec Nginx.
+
+Adresses publiques :
+
+- Front : **https://iut.cafeclaudie.fr/TasTom/**
+- API : **https://iut.cafeclaudie.fr/TasTom/health**
+
+Dossier serveur : `/srv/binggge/TasTom`. Si votre login serveur diffère,
+ajustez ces URL.
 
 Deux réglages à faire une fois dans les *Settings* du dépôt GitHub :
 
