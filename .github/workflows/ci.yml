@@ -81,5 +81,7 @@ jobs:
           echo "$SSH_DEPLOY_KEY" > ~/.ssh/id_binggge
           chmod 600 ~/.ssh/id_binggge
           ssh-keyscan iut.cafeclaudie.fr >> ~/.ssh/known_hosts 2>/dev/null
+          # sudo binggge = docker compose avec les droits du serveur.
+          # cd ~ car le HOME du compte EST /srv/binggge/<login>.
           ssh -i ~/.ssh/id_binggge "$LOGIN@iut.cafeclaudie.fr" \
-            "cd /srv/binggge/$LOGIN && git pull && docker compose up -d --build"
+            "cd ~ && git pull && sudo binggge up -d --build"
