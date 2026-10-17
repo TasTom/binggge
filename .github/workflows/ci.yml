@@ -63,3 +63,23 @@ jobs:
       # ${GITHUB_SHA::7} = équivalent de $CI_COMMIT_SHORT_SHA.
       - name: Construire l'image
         run: docker build -t "binggge-api:${GITHUB_SHA::7}" ./api
+
+  deploy:
+    name: Mise en ligne
+    needs: build
+    # Équivalent de rules: if $CI_COMMIT_BRANCH == "main"
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Déployer sur le serveur
+        env:
+          SSH_DEPLOY_KEY: ${{ secrets.SSH_DEPLOY_KEY }}
+          LOGIN: ${{ vars.LOGIN }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_DEPLOY_KEY" > ~/.ssh/id_binggge
+          chmod 600 ~/.ssh/id_binggge
+          ssh-keyscan iut.cafeclaudie.fr >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/id_binggge "$LOGIN@iut.cafeclaudie.fr" \
+            "cd /srv/binggge/$LOGIN && git pull && docker compose up -d --build"
