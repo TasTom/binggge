@@ -20,9 +20,9 @@ services:
       # le mot de passe réel de la base.
       POSTGRES_PASSWORD: ${DB_PASS}
     volumes:
+      # Volume nommé uniquement : le serveur interdit les montages de dossiers
+      # de l'hôte. Le schéma est chargé à la main après le premier déploiement.
       - pgdata:/var/lib/postgresql/data
-      # Chargé automatiquement au tout premier démarrage, quand pgdata est vide.
-      - ./api/db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d binggge"]
       interval: 5s
