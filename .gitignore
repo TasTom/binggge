@@ -2,4 +2,11 @@ node_modules/
 .env
 .DS_Store
 .dockerignore
+!front/.dockerignore
 binggge - TP3.pdf
+.design-skills/
+.impeccable/cache/
+.impeccable/mocks/
+.impeccable/questions/
+front/dist/
+front/.env.local
