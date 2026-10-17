@@ -1,0 +1,56 @@
+[
+  {
+    "id": 44933,
+    "title": "Severance",
+    "year": 2022,
+    "image": "posters/44933.jpg",
+    "sourceImage": "https://static.tvmaze.com/uploads/images/medium_portrait/548/1371406.jpg",
+    "sourceUrl": "https://www.tvmaze.com/shows/44933/severance",
+    "genre": "Science-fiction"
+  },
+  {
+    "id": 54198,
+    "title": "The Bear",
+    "year": 2022,
+    "image": "posters/54198.jpg",
+    "sourceImage": "https://static.tvmaze.com/uploads/images/medium_portrait/629/1574642.jpg",
+    "sourceUrl": "https://www.tvmaze.com/shows/54198/the-bear",
+    "genre": "Comédie"
+  },
+  {
+    "id": 169,
+    "title": "Breaking Bad",
+    "year": 2008,
+    "image": "posters/169.jpg",
+    "sourceImage": "https://static.tvmaze.com/uploads/images/medium_portrait/501/1253519.jpg",
+    "sourceUrl": "https://www.tvmaze.com/shows/169/breaking-bad",
+    "genre": "Drame"
+  },
+  {
+    "id": 17861,
+    "title": "Dark",
+    "year": 2017,
+    "image": "posters/17861.jpg",
+    "sourceImage": "https://static.tvmaze.com/uploads/images/medium_portrait/504/1262352.jpg",
+    "sourceUrl": "https://www.tvmaze.com/shows/17861/dark",
+    "genre": "Science-fiction"
+  },
+  {
+    "id": 16149,
+    "title": "Fleabag",
+    "year": 2016,
+    "image": "posters/16149.jpg",
+    "sourceImage": "https://static.tvmaze.com/uploads/images/medium_portrait/192/482341.jpg",
+    "sourceUrl": "https://www.tvmaze.com/shows/16149/fleabag",
+    "genre": "Comédie"
+  },
+  {
+    "id": 46562,
+    "title": "The Last of Us",
+    "year": 2023,
+    "image": "posters/46562.jpg",
+    "sourceImage": "https://static.tvmaze.com/uploads/images/medium_portrait/563/1409008.jpg",
+    "sourceUrl": "https://www.tvmaze.com/shows/46562/the-last-of-us",
+    "genre": "Drame"
+  }
+]
